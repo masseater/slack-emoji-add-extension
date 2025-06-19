@@ -3,6 +3,13 @@
 // 拡張機能がインストールされた時の処理
 chrome.runtime.onInstalled.addListener(() => {
     console.log('Slack Emoji Uploader extension installed');
+    
+    // コンテキストメニューを作成
+    chrome.contextMenus.create({
+        id: 'upload-to-slack',
+        title: 'Slackに絵文字として追加',
+        contexts: ['image']
+    });
 });
 
 // Content scriptからのメッセージを処理
@@ -148,3 +155,45 @@ async function uploadEmojiToTeam(data) {
         throw error;
     }
 }
+
+// コンテキストメニューのクリックハンドラ
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (info.menuItemId === 'upload-to-slack' && info.srcUrl) {
+        try {
+            // 画像URLから画像データを取得
+            const imageData = await fetchImageAsBase64(info.srcUrl);
+            
+            // 画像を一時保存
+            await chrome.storage.local.set({ 
+                pendingImage: {
+                    url: info.srcUrl,
+                    data: imageData
+                }
+            });
+            
+            // ポップアップを開く
+            chrome.action.openPopup();
+            
+        } catch (error) {
+            console.error('Context menu error:', error);
+        }
+    }
+});
+
+// 画像をBase64として取得
+async function fetchImageAsBase64(url) {
+    try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        throw new Error('画像の取得に失敗しました');
+    }
+}
+

@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 初期読み込み時にチーム一覧を取得
     loadSlackTeams();
+    
+    // ペンディング画像をチェック
+    checkPendingImage();
 });
 
 // Slackチーム一覧を読み込む
@@ -50,7 +53,7 @@ async function loadSlackTeams() {
 }
 
 // チーム選択ドロップダウンを更新
-function updateTeamSelect(teams) {
+async function updateTeamSelect(teams) {
     const teamSelect = document.getElementById('team-select');
     teamSelect.innerHTML = '<option value="">チームを選択してください</option>';
     
@@ -58,7 +61,27 @@ function updateTeamSelect(teams) {
         const option = document.createElement('option');
         option.value = team.teamdomain;
         option.textContent = team.name;
+        option.dataset.teamName = team.name;
         teamSelect.appendChild(option);
+    });
+    
+    // 最後に使用したチームを復元
+    const result = await chrome.storage.local.get(['lastUsedTeam']);
+    if (result.lastUsedTeam && teams.some(t => t.teamdomain === result.lastUsedTeam.teamdomain)) {
+        teamSelect.value = result.lastUsedTeam.teamdomain;
+    }
+    
+    // チーム選択の変更を監視
+    teamSelect.addEventListener('change', async () => {
+        const selectedOption = teamSelect.options[teamSelect.selectedIndex];
+        if (selectedOption.value) {
+            await chrome.storage.local.set({
+                lastUsedTeam: {
+                    teamdomain: selectedOption.value,
+                    name: selectedOption.dataset.teamName
+                }
+            });
+        }
     });
     
     updateUploadButton();
@@ -194,4 +217,82 @@ function showStatusMessage(message, type) {
 function hideStatusMessage() {
     const statusMessage = document.getElementById('status-message');
     statusMessage.style.display = 'none';
+}
+
+// ペンディング画像をチェック
+async function checkPendingImage() {
+    try {
+        const result = await chrome.storage.local.get(['pendingImage']);
+        
+        if (result.pendingImage) {
+            // ペンディング画像がある場合
+            const { url, data } = result.pendingImage;
+            
+            // 画像をプレビューに追加
+            const blob = await dataURLtoBlob(data);
+            const file = new File([blob], extractFileName(url), { type: blob.type });
+            selectedFiles = [file];
+            displayPreviews();
+            
+            // 画像名を設定
+            const emojiNameInput = document.getElementById('emoji-name');
+            emojiNameInput.value = extractImageNameFromURL(url);
+            
+            updateUploadButton();
+            
+            // メッセージを表示
+            showStatusMessage('右クリックした画像を読み込みました', 'info');
+            
+            // ペンディング画像をクリア
+            await chrome.storage.local.remove(['pendingImage']);
+        }
+    } catch (error) {
+        console.error('Failed to check pending image:', error);
+    }
+}
+
+// Data URLをBlobに変換
+async function dataURLtoBlob(dataURL) {
+    const arr = dataURL.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    
+    while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    
+    return new Blob([u8arr], { type: mime });
+}
+
+// URLからファイル名を抽出
+function extractFileName(url) {
+    try {
+        const urlObj = new URL(url);
+        const pathname = urlObj.pathname;
+        const filename = pathname.split('/').pop();
+        return filename || 'image.png';
+    } catch {
+        return 'image.png';
+    }
+}
+
+// URLから絵文字名を抽出
+function extractImageNameFromURL(url) {
+    try {
+        const urlObj = new URL(url);
+        const pathname = urlObj.pathname;
+        const filename = pathname.split('/').pop();
+        const nameWithoutExt = filename.split('.')[0];
+        
+        // ファイル名をクリーンアップ（絵文字名として使える形式に）
+        return nameWithoutExt
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '') || 'emoji';
+    } catch {
+        return 'emoji';
+    }
 }
