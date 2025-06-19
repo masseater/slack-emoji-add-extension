@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Icon Generator</title>
+    <style>
+        .icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #4A90E2;
+            color: white;
+            font-weight: bold;
+            border-radius: 20%;
+            margin: 10px;
+        }
+        .icon-16 { width: 16px; height: 16px; font-size: 10px; }
+        .icon-48 { width: 48px; height: 48px; font-size: 28px; }
+        .icon-128 { width: 128px; height: 128px; font-size: 72px; }
+    </style>
+</head>
+<body>
+    <p>右クリックして「画像として保存」してください：</p>
+    <div class="icon icon-16">🙂</div>
+    <div class="icon icon-48">🙂</div>
+    <div class="icon icon-128">🙂</div>
+    
+    <script>
+        // Canvas要素を作成してアイコンを生成
+        function createIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // 背景を描画
+            ctx.fillStyle = '#4A90E2';
+            ctx.beginPath();
+            const radius = size * 0.2;
+            ctx.roundRect(0, 0, size, size, radius);
+            ctx.fill();
+            
+            // テキストを描画
+            ctx.font = `${size * 0.6}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = 'white';
+            ctx.fillText('📨', size / 2, size / 2);
+            
+            // 画像として保存
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `icon${size}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+        }
+        
+        // 各サイズのアイコンを生成
+        setTimeout(() => {
+            createIcon(16);
+            setTimeout(() => createIcon(48), 100);
+            setTimeout(() => createIcon(128), 200);
+        }, 1000);
+    </script>
+</body>
+</html>

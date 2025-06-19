@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Slack Emoji Uploader</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Slack Emoji Uploader</h1>
+        
+        <div class="team-section">
+            <label for="team-select">
+                アップロード先:
+                <select id="team-select">
+                    <option value="">チームを選択してください</option>
+                </select>
+            </label>
+            <button id="refresh-teams" class="btn-icon" title="チーム一覧を更新">🔄</button>
+        </div>
+        
+        <div class="upload-section">
+            <label for="emoji-file" class="file-label">
+                <span class="file-icon">📁</span>
+                <span class="file-text">画像を選択</span>
+                <input type="file" id="emoji-file" accept="image/*" multiple>
+            </label>
+            
+            <div id="preview-container" class="preview-container"></div>
+        </div>
+        
+        <div class="emoji-info">
+            <label for="emoji-name">
+                絵文字名:
+                <input type="text" id="emoji-name" placeholder="emoji_name">
+            </label>
+        </div>
+        
+        <div class="action-buttons">
+            <button id="upload-btn" class="btn-primary" disabled>Slackにアップロード</button>
+            <button id="clear-btn" class="btn-secondary">クリア</button>
+        </div>
+        
+        <div id="status-message" class="status-message"></div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
