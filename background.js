@@ -1,5 +1,8 @@
 // Service Worker for Chrome Extension
 
+import { getSlackTeams, uploadEmojiToTeam } from './js/slack-api.js';
+import { fetchImageAsBase64 } from './js/utils.js';
+
 // 拡張機能がインストールされた時の処理
 chrome.runtime.onInstalled.addListener(() => {
     console.log('Slack Emoji Uploader extension installed');
@@ -12,152 +15,49 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-// Content scriptからのメッセージを処理
+// メッセージハンドラ
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    switch (request.action) {
-        case 'getSlackTeams':
-            getSlackTeams()
-                .then(teams => sendResponse({ success: true, teams }))
-                .catch(error => sendResponse({ success: false, error: error.message }));
-            return true; // 非同期レスポンスを示す
-            
-        case 'getSlackToken':
-            getSlackTokenForTeam(request.teamdomain)
-                .then(token => sendResponse({ success: true, token }))
-                .catch(error => sendResponse({ success: false, error: error.message }));
-            return true;
-            
-        case 'uploadEmoji':
-            uploadEmojiToTeam(request.data)
-                .then(result => sendResponse({ success: true, result }))
-                .catch(error => sendResponse({ success: false, error: error.message }));
-            return true;
-    }
+    handleMessage(request, sender, sendResponse);
+    return true; // 非同期レスポンスを示す
 });
 
-// Slackにログインしているチーム一覧を取得
-async function getSlackTeams() {
-    try {
-        const response = await fetch('https://slack.com/signin', {
-            credentials: 'include'
-        });
-        
-        const text = await response.text();
-        
-        // HTMLからチーム情報を抽出
-        const match = text.match(/data-props='([^']+)'/);
-        if (!match) {
-            // 別の形式も試す
-            const match2 = text.match(/data-props="([^"]+)"/);
-            if (!match2) {
-                throw new Error('チーム情報が見つかりません');
-            }
-            const propsText = match2[1].replace(/&quot;/g, '"');
-            const props = JSON.parse(propsText);
-            return extractTeams(props);
-        }
-        
-        const propsText = match[1].replace(/&quot;/g, '"');
-        const props = JSON.parse(propsText);
-        return extractTeams(props);
-        
-    } catch (error) {
-        console.error('Failed to get Slack teams:', error);
-        throw error;
-    }
-}
-
-// チーム情報を抽出
-function extractTeams(props) {
-    if (!props || !props.loggedInTeams) {
-        return [];
-    }
-    
-    return props.loggedInTeams
-        .filter(team => !team.is_enterprise && team.team_name && team.team_domain)
-        .map(team => ({
-            name: team.team_name,
-            teamdomain: team.team_domain
-        }));
-}
-
-// 特定のチームのトークンを取得
-async function getSlackTokenForTeam(teamdomain) {
-    try {
-        const url = `https://${teamdomain}.slack.com/customize/emoji`;
-        const response = await fetch(url, {
-            credentials: 'include'
-        });
-        
-        const text = await response.text();
-        
-        // APIトークンを抽出
-        const tokenRegex = /api_token["']?\s*:\s*["']([^"']+)["']/;
-        const match = tokenRegex.exec(text);
-        
-        if (!match) {
-            throw new Error('APIトークンが見つかりません');
-        }
-        
-        return match[1];
-        
-    } catch (error) {
-        console.error('Failed to get Slack token:', error);
-        throw error;
-    }
-}
-
-// 絵文字をアップロード
-async function uploadEmojiToTeam(data) {
-    try {
-        const { teamdomain, name, imageData } = data;
-        
-        // トークンを取得
-        const token = await getSlackTokenForTeam(teamdomain);
-        
-        // Base64データをBlobに変換
-        const base64Data = imageData.split(',')[1];
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'image/png' });
-        
-        // FormDataを作成
-        const formData = new FormData();
-        formData.append('mode', 'data');
-        formData.append('name', name);
-        formData.append('image', blob, 'emoji.png');
-        formData.append('token', token);
-        
-        // アップロード
-        const uploadUrl = `https://${teamdomain}.slack.com/api/emoji.add`;
-        const uploadResponse = await fetch(uploadUrl, {
-            method: 'POST',
-            body: formData,
-            credentials: 'include'
-        });
-        
-        const result = await uploadResponse.json();
-        
-        if (!result.ok) {
-            throw new Error(result.error || 'アップロードに失敗しました');
-        }
-        
-        return result;
-        
-    } catch (error) {
-        console.error('Failed to upload emoji:', error);
-        throw error;
-    }
-}
-
 // コンテキストメニューのクリックハンドラ
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+chrome.contextMenus.onClicked.addListener(handleContextMenuClick);
+
+/**
+ * メッセージを処理
+ * @param {Object} request - リクエストオブジェクト
+ * @param {Object} sender - 送信者情報
+ * @param {Function} sendResponse - レスポンス関数
+ */
+async function handleMessage(request, sender, sendResponse) {
+    try {
+        switch (request.action) {
+            case 'getSlackTeams':
+                const teams = await getSlackTeams();
+                sendResponse({ success: true, teams });
+                break;
+                
+            case 'uploadEmoji':
+                const result = await uploadEmojiToTeam(request.data);
+                sendResponse({ success: true, result });
+                break;
+                
+            default:
+                sendResponse({ success: false, error: 'Unknown action' });
+        }
+    } catch (error) {
+        console.error('Message handler error:', error);
+        sendResponse({ success: false, error: error.message });
+    }
+}
+
+/**
+ * コンテキストメニューのクリックを処理
+ * @param {Object} info - クリック情報
+ * @param {Object} tab - タブ情報
+ */
+async function handleContextMenuClick(info, tab) {
     if (info.menuItemId === 'upload-to-slack' && info.srcUrl) {
         try {
             // 画像URLから画像データを取得
@@ -178,22 +78,4 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             console.error('Context menu error:', error);
         }
     }
-});
-
-// 画像をBase64として取得
-async function fetchImageAsBase64(url) {
-    try {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
-    } catch (error) {
-        throw new Error('画像の取得に失敗しました');
-    }
 }
-
